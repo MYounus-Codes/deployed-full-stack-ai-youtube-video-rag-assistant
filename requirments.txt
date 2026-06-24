@@ -1,0 +1,15 @@
+langchain
+langchain-community
+langchain-core
+langchain-text-splitters
+langchain-huggingface
+langchain-pinecone
+langchain-groq
+pinecone
+python-dotenv
+youtube-transcript-api
+sentence-transformers
+rank-bm25
+yt-dlp
+torchvision
+streamlit
