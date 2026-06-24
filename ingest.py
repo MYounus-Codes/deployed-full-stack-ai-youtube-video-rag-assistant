@@ -116,14 +116,10 @@ def ingest_url(url):
             namespace=video_id,
         )
 
-        with open(
-            f"data/bm25/{video_id}.pkl",
-            "wb",
-        ) as f:
-            pickle.dump(
-                chunks,
-                f,
-            )
+        with open(f"data/bm25/{video_id}.pkl","wb",) as f:
+            pickle.dump(chunks,f,)
+            print("Saving BM25...")
+
 
         indexed_videos.append(
             {
