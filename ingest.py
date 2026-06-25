@@ -1,21 +1,8 @@
 import os
 import pickle
 
-from dotenv import load_dotenv
 from langchain_core.documents import Document
-from langchain_text_splitters import (
-    RecursiveCharacterTextSplitter,
-)
-from langchain_huggingface import (
-    HuggingFaceEmbeddings,
-)
-from langchain_pinecone import (
-    PineconeVectorStore,
-)
-from pinecone import (
-    Pinecone,
-    ServerlessSpec,
-)
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from utils import (
     get_playlist_videos,
@@ -24,30 +11,13 @@ from utils import (
     extract_video_id,
 )
 
-load_dotenv()
-
 INDEX_NAME = "youtube-rag-assistant"
 
 
-def ingest_url(url):
-    os.makedirs(
-        "data/bm25",
-        exist_ok=True,
-    )
-
-    embeddings = (
-        HuggingFaceEmbeddings(
-            model_name="BAAI/bge-small-en-v1.5"
-        )
-    )
-
-    pc = Pinecone(
-        api_key=os.getenv(
-            "PINECONE_API_KEY"
-        )
-    )
-
+def ensure_pinecone_index(pc):
     if INDEX_NAME not in pc.list_indexes().names():
+        from pinecone import ServerlessSpec
+
         pc.create_index(
             name=INDEX_NAME,
             dimension=384,
@@ -58,33 +28,27 @@ def ingest_url(url):
             ),
         )
 
-    index = pc.Index(INDEX_NAME)
 
-    vector_store = PineconeVectorStore(
-        index=index,
-        embedding=embeddings,
-    )
+def ingest_url(url, embeddings, vector_store):
+    os.makedirs("data/bm25", exist_ok=True)
 
     videos = get_playlist_videos(url)
+    print(f"Processing {len(videos)} video(s)")
 
     indexed_videos = []
 
     for video_url in videos:
+        print(f"Processing URL: {video_url}")
 
-        title = get_video_title(
-            video_url
-        )
+        title = get_video_title(video_url)
+        print(f"Title: {title}")
 
-        video_id = extract_video_id(
-            video_url
-        )
+        video_id = extract_video_id(video_url)
 
-        transcript = get_transcript(
-            video_id
-        )
+        print("Extracting transcript...")
+        transcript = get_transcript(video_id)
 
         documents = []
-
         for seg in transcript:
             documents.append(
                 Document(
@@ -98,28 +62,19 @@ def ingest_url(url):
                 )
             )
 
-        splitter = (
-            RecursiveCharacterTextSplitter(
-                chunk_size=1000,
-                chunk_overlap=200,
-            )
+        print("Creating chunks...")
+        splitter = RecursiveCharacterTextSplitter(
+            chunk_size=1000,
+            chunk_overlap=200,
         )
+        chunks = splitter.split_documents(documents)
 
-        chunks = (
-            splitter.split_documents(
-                documents
-            )
-        )
+        print("Creating embeddings...")
+        print("Uploading vectors...")
+        vector_store.add_documents(chunks, namespace=video_id)
 
-        vector_store.add_documents(
-            chunks,
-            namespace=video_id,
-        )
-
-        with open(f"data/bm25/{video_id}.pkl","wb",) as f:
-            pickle.dump(chunks,f,)
-            print("Saving BM25...")
-
+        with open(f"data/bm25/{video_id}.pkl", "wb") as f:
+            pickle.dump(chunks, f)
 
         indexed_videos.append(
             {
@@ -128,5 +83,7 @@ def ingest_url(url):
                 "url": video_url,
             }
         )
+
+        print(f"Finished: {title}")
 
     return indexed_videos
